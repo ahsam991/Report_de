@@ -1,0 +1,10 @@
+.git
+.gitignore
+README.md
+*.md
+.eslintignore
+eslint.config.mjs
+plan.md
+AGENTS.md
+CLAUDE.md
+PROCESS.md
