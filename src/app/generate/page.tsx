@@ -392,6 +392,9 @@ export default function GenerateReport() {
   const [isDragging, setIsDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Excel mode — manual override inputs (shown after upload)
+  const [excelManualId, setExcelManualId] = useState("");
+  const [excelManualAlias, setExcelManualAlias] = useState("");
 
   // Step 2 — Mapping & Config
   const [campaignIdCol, setCampaignIdCol] = useState<string>("");
@@ -473,14 +476,16 @@ export default function GenerateReport() {
   const selectNone = () => setEnabledKeys(new Set());
 
   // ── Step 1 → 2 validation ──
+  // Excel mode: valid if file uploaded OR manual ID provided
   const step1Valid = mode === "manual"
     ? !!manualCampaignId.trim()
-    : !!file && fileHeaders.length > 0;
+    : (!!file && fileHeaders.length > 0) || !!excelManualId.trim();
 
   // ── Step 2 → 3 validation ──
+  // Excel mode: valid if manual ID provided OR campaignIdCol is mapped
   const step2Valid = mode === "manual"
     ? true
-    : !!campaignIdCol;
+    : !!excelManualId.trim() || !!campaignIdCol;
 
   // ── Generate ──
   const handleGenerate = () => {
@@ -493,7 +498,15 @@ export default function GenerateReport() {
         campaignId: manualCampaignId.trim(),
         sql: buildSQL(reportTypeId, manualCampaignId.trim(), reportDate, enabledKeys, qIds),
       }];
+    } else if (excelManualId.trim()) {
+      // Excel mode but user provided manual override ID → single query
+      generated = [{
+        label: excelManualAlias.trim() || `Campaign ${excelManualId.trim()}`,
+        campaignId: excelManualId.trim(),
+        sql: buildSQL(reportTypeId, excelManualId.trim(), reportDate, enabledKeys, qIds),
+      }];
     } else {
+      // Use Excel rows with column mapping
       const campaignIdIdx = fileHeaders.indexOf(campaignIdCol);
       const aliasIdx = aliasCol ? fileHeaders.indexOf(aliasCol) : -1;
 
@@ -683,7 +696,7 @@ export default function GenerateReport() {
                       </p>
                     </div>
                     <button
-                      onClick={() => { setFile(null); setFileHeaders([]); setFileRows([]); setCampaignIdCol(""); setAliasCol(""); }}
+                      onClick={() => { setFile(null); setFileHeaders([]); setFileRows([]); setCampaignIdCol(""); setAliasCol(""); setExcelManualId(""); setExcelManualAlias(""); }}
                       className="text-muted-foreground hover:text-white transition-colors"
                     >
                       <X className="w-4 h-4" />
@@ -718,6 +731,56 @@ export default function GenerateReport() {
                       </div>
                     </div>
                   )}
+
+                  {/* ── Manual override section (shown after file is loaded) ── */}
+                  <div className="border border-dashed border-white/10 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <p className="text-xs font-bold text-white">Override with Manual ID</p>
+                      <span className="text-[10px] text-muted-foreground ml-1">— enter a Campaign ID directly instead of using Excel rows</span>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase flex items-center gap-1.5">
+                          <Hash className="w-3 h-3 text-primary" /> Campaign ID
+                        </label>
+                        <input
+                          type="number"
+                          value={excelManualId}
+                          onChange={e => setExcelManualId(e.target.value)}
+                          placeholder="e.g. 186"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-lg font-mono font-bold text-primary focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/30"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Overrides Excel column mapping — one SQL query generated.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase flex items-center gap-1.5">
+                          <Layers className="w-3 h-3 text-primary" /> Alias / Label <span className="font-normal text-white/30 ml-1">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={excelManualAlias}
+                          onChange={e => setExcelManualAlias(e.target.value)}
+                          placeholder="e.g. PJ Frost Campaign"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/30"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Used as label/comment in the SQL output and filename.</p>
+                      </div>
+                    </div>
+                    {excelManualId.trim() && (
+                      <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2 text-[11px]">
+                        <CheckCircle className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span className="text-primary font-semibold">Manual override active</span>
+                        <span className="text-muted-foreground">— Campaign <span className="font-mono font-bold text-white">{excelManualId}</span> will be used. Excel rows ignored.</span>
+                        <button
+                          onClick={() => { setExcelManualId(""); setExcelManualAlias(""); }}
+                          className="ml-auto text-muted-foreground hover:text-white transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -762,9 +825,38 @@ export default function GenerateReport() {
                 <div className="bg-primary/10 p-2.5 rounded-xl border border-primary/20 text-primary"><Link2 className="w-5 h-5" /></div>
                 <div>
                   <p className="text-sm font-bold text-white">Map Excel Columns</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Tell the system which column in your file contains the Campaign ID and Alias.</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {excelManualId.trim()
+                      ? "Manual override is active — column mapping is skipped."
+                      : "Tell the system which column in your file contains the Campaign ID and Alias."}
+                  </p>
                 </div>
               </div>
+
+              {/* If manual override is set — show confirmation banner, hide dropdowns */}
+              {excelManualId.trim() ? (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 bg-primary/10 border border-primary/20 rounded-2xl px-5 py-4">
+                    <CheckCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-white">Manual Override Active</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Campaign ID <span className="font-mono font-bold text-primary text-sm">{excelManualId}</span>
+                        {excelManualAlias.trim() && <> · Alias <span className="font-semibold text-white">{excelManualAlias}</span></>}
+                        {" "}will be used. A single SQL query will be generated.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setExcelManualId(""); setExcelManualAlias(""); }}
+                      className="ml-auto text-muted-foreground hover:text-white text-[11px] underline underline-offset-2 shrink-0"
+                    >
+                      Clear override
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground pl-1">To use Excel row data instead, clear the override and map the column below.</p>
+                </div>
+              ) : (
+                <>
 
               <div className="grid sm:grid-cols-2 gap-5">
                 {/* Campaign ID column */}
@@ -826,8 +918,10 @@ export default function GenerateReport() {
                   </div>
                 </div>
               )}
+              </> )}
             </div>
           )}
+
 
           {/* Report Config */}
           <div className="glass-card p-6 rounded-3xl space-y-5">
