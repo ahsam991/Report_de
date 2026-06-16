@@ -450,10 +450,17 @@ export default function GenerateReport() {
     const aIdx = fileHeaders.indexOf(aliasCol);
     
     const qs: DynamicQuestion[] = [];
+    const seenIds = new Set<string>();
+    const seenAliases = new Set<string>();
+
     fileRows.forEach(r => {
       const id = r[qIdx]?.trim();
       const alias = r[aIdx]?.trim();
-      if (id && alias) qs.push({ id, alias });
+      if (id && alias && !seenIds.has(id) && !seenAliases.has(alias)) {
+        seenIds.add(id);
+        seenAliases.add(alias);
+        qs.push({ id, alias });
+      }
     });
     setParsedQuestions(qs);
     // By default enable all dynamic columns
